@@ -2,9 +2,10 @@
 import numpy as np
 import numpy.linalg as LA
 import random
-from sklearn.preprocessing import StandardScaler 
+from sklearn.preprocessing import StandardScaler
 import csv
 import sys
+
 
 #convert point_view to col_view given headers
 def col_view(point_view, headers):
@@ -17,6 +18,7 @@ def col_view(point_view, headers):
 
     return column_view
 
+
 #convert col_view to point_view
 def p_view(col_view):
     col_view_list = []
@@ -28,22 +30,19 @@ def p_view(col_view):
 
     return np.transpose(col_view_list)
 
+
 #subset of point view given lower bound and upper bound
 #preconditions: upperbound < len(point_view), lower_bound >= 0
 def p_range(point_view, lower_bound, upper_bound):
     p_subset = []
-    for i in range(lower_bound, upper_bound+1):
-      p_subset.append(point_view[i])
+    for i in range(lower_bound, upper_bound + 1):
+        p_subset.append(point_view[i])
 
     return np.array(p_subset)
 
-        
-
-
 
 def parse_dataset(filename):
-    
-    
+
     with open(filename) as csv_file:
         headers = next(csv.reader(csv_file))
         headers.pop(28)
@@ -58,7 +57,7 @@ def parse_dataset(filename):
         column_view = col_view(pv_copy, headers)
 
         #split into response and independent variables
-        
+
         #response
         response_header = headers[0]
         response_column = column_view[response_header]
@@ -66,19 +65,16 @@ def parse_dataset(filename):
         iv_headers = headers.copy()
         iv_headers.pop(0)
 
-
         #column_view = indepenent_variables
         #make indepent_variable version in point_view form
         #reassign point_view to independent version
         point_view = p_view(column_view)
-        
-        
 
-    
-    return (column_view, point_view, response_header, response_column, iv_headers)
-    
+    return (column_view, point_view, response_header, response_column,
+            iv_headers)
 
-def augement(point_view):
+
+def augment(point_view):
     col_view = np.transpose(point_view)
     col_view_ones = np.ones(len(col_view[0]))
     col_view = col_view.tolist()
@@ -88,8 +84,9 @@ def augement(point_view):
 
     return augemented_point_view
 
+
 def ridge_regression_sgd(D, Y, alpha, eta, eps, max_iter):
-    aug_D = augement(D)
+    aug_D = augment(D)
     t = 0
     aug_w = np.ones(len(aug_D[0]))
     converged = False
@@ -98,22 +95,27 @@ def ridge_regression_sgd(D, Y, alpha, eta, eps, max_iter):
         for k in range(1, len(aug_D)):
             r_k = random.randrange(1, len(aug_D))
             p = aug_D[r_k]
-            gradient = -((Y[r_k] - np.dot(np.transpose(p), aug_w)) * (p)) + ((alpha/len(aug_D)) * aug_w)
+            gradient = -((Y[r_k] - np.dot(np.transpose(p), aug_w)) *
+                         (p)) + ((alpha / len(aug_D)) * aug_w)
 
-            aug_new_w = np.subtract(aug_w, (eta*gradient))
+            aug_new_w = np.subtract(aug_w, (eta * gradient))
             prev_w = aug_w
             aug_w = aug_new_w
         t = t + 1
-        print(aug_w)
         converged = LA.norm(aug_w - prev_w) <= eps
-    print(t)
+        if (t == max_iter):
+            print('max iterations reached')
+            converged = True
 
     return aug_w
 
 
-def SSE(aug_w, validation_data):
-    LA.norm()
-    
+def closed_form_ridge_reg(D, Y, alpha):
+    aug_D = augment(D)
+    inv = LA.pinv(np.dot(np.transpose(aug_D), aug_D))
+    augD_Y = np.dot(np.transpose(aug_D), Y)
+
+    return np.dot(inv, augD_Y)
 
 
 if __name__ == "__main__":
@@ -131,48 +133,65 @@ if __name__ == "__main__":
     #remove last attribute
     #use first attribute (after removing date time) as the response variables, with the remaining as predictor variables
     #use standard scalar to normalize each attribute to have mean zero and variance one.
-        #use the skearn StandardScalar to do this OR use formula (xi - ux) / sigx
-    
-    col_view, point_view, resp_header, resp_col, iv_headers = parse_dataset(filename)
+    #use the skearn StandardScalar to do this OR use formula (xi - ux) / sigx
 
-    
+    col_view, point_view, resp_header, resp_col, iv_headers = parse_dataset(
+        filename)
+
     #point_views
     training_data = p_range(point_view, 0, 13734)
-    validation_data = p_range(point_view, 13735, 13734+2000)
-    testing_data = p_range(point_view, 13735+2000, 13734+2000+4000)
+    validation_data = p_range(point_view, 13735, 13734 + 2000)
+    testing_data = p_range(point_view, 13735 + 2000, 13734 + 2000 + 4000)
 
+    training_response = p_range(resp_col, 0, 13734)
+    validation_response = p_range(resp_col, 13735, 13734 + 2000)
+    testing_response = p_range(resp_col, 13735 + 2000, 13734 + 2000 + 4000)
 
-    learned_w = ridge_regression_sgd(training_data, resp_col, alpha, eta, eps, max_iter)
-    
+    closed_form_w = closed_form_ridge_reg(augment(training_data),
+                                          training_response, alpha)
+    print(closed_form_w)
+    learned_w = ridge_regression_sgd(augment(training_data), resp_col, alpha,
+                                     eta, eps, max_iter)
+    print(
+        "angle:",
+        np.rad2deg(
+            np.arccos(
+                np.dot((closed_form_w / LA.norm(closed_form_w)),
+                       (learned_w / LA.norm(learned_w))))))
+    print('------------------------')
 
+    #find best alpha and eta
+    t_alpha = 1
+    optimal_alpha = 907
+    '''
+    minimal_sse = sys.maxsize
+    aug_VD = augment(validation_data)
+    for i in range(0, 1000):
+        learn = ridge_regression_sgd(training_data, training_response, t_alpha,
+                                     eta, eps, max_iter)
+        validation_sse = 0
+        for j in range(0, len(aug_VD)):
+            validation_sse += np.power(np.dot(np.transpose(learn), aug_VD[j]),
+                                       2)
+        if (validation_sse < minimal_sse):
+            minimal_sse = validation_sse
+            optimal_alpha = t_alpha
+            print(optimal_alpha, minimal_sse)
+        else:
+            validation_sse = 0
 
-    #what do we have?
+        t_alpha += 1
+'''
+aug_T = augment(testing_data)
 
-    #augmented training data in point and column view
+regularized_w = ridge_regression_sgd(aug_T, testing_response, optimal_alpha,
+                                     eta, eps, max_iter)
 
+print(regularized_w)
 
-    #what do we need for linear regression with regularization?
-    #ridge regression inputs: points, response_column, nu, E
-    #n = len(points)
-
-
-
-    #step 2 (linear regression with Regularization)
-    #implement ridge regression algorithm using batch gradient descent to solve for w.
-    #Use equation 23.35 to compute the gradient at each step
-    #choose appropriate step size value n and regularization constant, alpha.
-
-    #should use the first 13735 points as training the next 2000 points as validation, and the last 4000 points for testing.
-    #the validation set will be used to find the best alpha and n values.
-        #for each value of alpha, first learn w on the training set then compute the SSE value on the validaton set.
-        #the value that gives the lead validation SSE is the one to choose.
-
-
-    #once the best alpha and w have been found, you should evaluate the model on the testing data.
-    #in particular you should compute the SSE value for the predicitons on the test data. You should
-    #also report the R^2 statistic on the test data which is defined as R^2 = (TSS - SSE) / TSS where TSS is the total scatter of the response variable
-        #TSS = sum from 1 to n of (yi - muY)^2
-    
-    #for initalizing the W vector, you may use the np.ones(), a vector of all ones.
-
-    #also very that the w vector found using hte batch gradient descent is close to the one computed using the closed form solution in equation 23.32
+print(
+    "angle:",
+    np.rad2deg(
+        np.arccos(
+            np.dot((closed_form_w / LA.norm(closed_form_w)),
+                   (regularized_w / LA.norm(regularized_w))))))
