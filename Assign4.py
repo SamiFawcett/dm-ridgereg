@@ -86,8 +86,8 @@ def augment(point_view):
 
 
 def ridge_regression_sgd(D, Y, alpha, eta, eps, max_iter):
-    aug_D = augment(D)
     t = 0
+    aug_D = D
     aug_w = np.ones(len(aug_D[0]))
     converged = False
     prev_w = aug_w
@@ -99,6 +99,7 @@ def ridge_regression_sgd(D, Y, alpha, eta, eps, max_iter):
                          (p)) + ((alpha / len(aug_D)) * aug_w)
 
             aug_new_w = np.subtract(aug_w, (eta * gradient))
+
             prev_w = aug_w
             aug_w = aug_new_w
         t = t + 1
@@ -111,11 +112,29 @@ def ridge_regression_sgd(D, Y, alpha, eta, eps, max_iter):
 
 
 def closed_form_ridge_reg(D, Y, alpha):
-    aug_D = augment(D)
-    inv = LA.pinv(np.dot(np.transpose(aug_D), aug_D))
-    augD_Y = np.dot(np.transpose(aug_D), Y)
+    inv = LA.pinv(np.dot(np.transpose(D), D))
+    augD_Y = np.dot(np.transpose(D), Y)
 
     return np.dot(inv, augD_Y)
+
+
+#data is augmented
+def SSE(w, D, Y):
+    sse = 0
+
+    for i in range(1, len(D)):
+        for j in range(1, len(Y)):
+            sse += np.power(Y[j] - np.dot(np.transpose(w), D[i]), 2)
+
+    return sse
+
+
+def TSS(Y):
+    tss = 0
+    mu_Y = np.mean(Y)
+    for i in range(1, len(Y)):
+        tss += np.power((Y[i] - mu_Y), 2)
+    return tss
 
 
 if __name__ == "__main__":
@@ -149,49 +168,26 @@ if __name__ == "__main__":
 
     closed_form_w = closed_form_ridge_reg(augment(training_data),
                                           training_response, alpha)
-    print(closed_form_w)
+
     learned_w = ridge_regression_sgd(augment(training_data), resp_col, alpha,
                                      eta, eps, max_iter)
-    print(
-        "angle:",
-        np.rad2deg(
-            np.arccos(
-                np.dot((closed_form_w / LA.norm(closed_form_w)),
-                       (learned_w / LA.norm(learned_w))))))
-    print('------------------------')
 
     #find best alpha and eta
     t_alpha = 1
     optimal_alpha = 907
-    '''
-    minimal_sse = sys.maxsize
-    aug_VD = augment(validation_data)
-    for i in range(0, 1000):
-        learn = ridge_regression_sgd(training_data, training_response, t_alpha,
-                                     eta, eps, max_iter)
-        validation_sse = 0
-        for j in range(0, len(aug_VD)):
-            validation_sse += np.power(np.dot(np.transpose(learn), aug_VD[j]),
-                                       2)
-        if (validation_sse < minimal_sse):
-            minimal_sse = validation_sse
-            optimal_alpha = t_alpha
-            print(optimal_alpha, minimal_sse)
-        else:
-            validation_sse = 0
 
-        t_alpha += 1
-'''
-aug_T = augment(testing_data)
+    aug_T = augment(testing_data)
 
-regularized_w = ridge_regression_sgd(aug_T, testing_response, optimal_alpha,
-                                     eta, eps, max_iter)
+    regularized_w = ridge_regression_sgd(aug_T, testing_response,
+                                         optimal_alpha, eta, eps, max_iter)
 
-print(regularized_w)
+    tss = TSS(testing_response)
+    sse = SSE(closed_form_w, aug_T, testing_response)
+    r_squared = (tss - sse) / tss
 
-print(
-    "angle:",
-    np.rad2deg(
-        np.arccos(
-            np.dot((closed_form_w / LA.norm(closed_form_w)),
-                   (regularized_w / LA.norm(regularized_w))))))
+    print("closed form:", closed_form_w)
+    print("optimal alpha:", optimal_alpha)
+    print("eta:", eta)
+    print("eps:", eps)
+    print("ridge regularization sgd learned:", regularized_w)
+    print("r^2:", r_squared)
